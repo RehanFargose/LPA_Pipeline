@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from google import genai
+import json
 from google.genai import types # The new unified types
 
 load_dotenv()
@@ -26,7 +27,15 @@ def extract_legal_details(legal_text):
         model='gemini-3-flash-preview',
         contents=prompt,
         config=types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+            thinking_config=types.ThinkingConfig(thinking_level="MEDIUM"),
+            response_mime_type="application/json",
         )
     )
-    return response.text
+
+
+    try:
+        data = json.loads(response.text)
+        return data
+    except json.JSONDecodeError:
+        print("Failed to parse JSON")
+        return None
