@@ -16,7 +16,7 @@ def extract_legal_details(legal_text):
     2. EVIDENCE: Specific documents, testimonies, or proofs cited.
     3. IPC/STATUTES: Any Indian Penal Code sections or specific Acts mentioned.
 
-    Format the output as a clean Python Dictionary.
+    Format the output as a clean Python Dictionary not a list.
     
     TEXT:
     {legal_text}
