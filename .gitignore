@@ -71,3 +71,8 @@ build/
 dist/
 *.egg-info/
 .cache/
+
+
+# Add the adapters
+Stages/2_Evidence_Scrutinization/Nyaya_Llama_Adapter_MTech.zip
+Stages/2_Evidence_Scrutinization/Nyaya_Llama_Adapter_MTech
