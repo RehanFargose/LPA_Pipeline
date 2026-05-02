@@ -1,20 +1,9 @@
 import streamlit as st
 import chromadb
 from sentence_transformers import SentenceTransformer
-import zipfile
 import os
-
-def prepare_database(zip_path, extract_to="./my_legal_db"):
-    # Only extract if the database directory doesn't already exist
-    if not os.path.exists(extract_to):
-        with st.spinner("Extracting 1.48GB Legal Database..."):
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_to)
-        st.success("Database Ready!")
-
-# Call this before loading resources
-# Ensure 'legal_index_package.zip' is in the same folder as your app
-prepare_database("legal_index_package.zip")
+import numpy as np
+import json
 
 
 # --- Page Configuration ---
@@ -25,9 +14,58 @@ st.markdown("### MTech Thesis Research: 1990–2025 Judgment Analysis")
 # --- Initialize Resources ---
 @st.cache_resource
 def load_chroma():
-    # Connect to the persistent path you set up earlier
-    client = chromadb.PersistentClient(path="./my_legal_db")
-    return client.get_or_create_collection(name="sc_judgments")
+    #  Setup persistent client
+    client = chromadb.PersistentClient(path="C:/LPA_Vector_DB/chroma_persistent_storage")
+    collection = client.get_or_create_collection(name="legal_precedents", metadata={"hnsw:space": "cosine"})
+
+    # Check if the collection is empty
+    if collection.count() == 0:
+        st.info("First-time setup: Indexing raw vectors into ChromaDB...")
+        
+        # Define paths to your extracted files[cite: 3]
+        base_path = "C:/LPA_Vector_DB/my_legal_db"
+        vectors_path = os.path.join(base_path, "sc_vectors.npy")
+        payload_path = os.path.join(base_path, "sc_payload.json")
+
+        if os.path.exists(vectors_path) and os.path.exists(payload_path):
+            # Load raw data
+            embeddings = np.load(vectors_path)
+            with open(payload_path, "r") as f:
+                payloads = json.load(f)
+
+            # 3. Batch insert into ChromaDB[cite: 1]
+            BATCH_SIZE = 5000
+            total_batches = (len(payloads) + BATCH_SIZE - 1) // BATCH_SIZE
+            
+            
+            # Create Streamlit progress elements
+            progress_text = "Indexing progress: 0%"
+            my_bar = st.progress(0, text=progress_text)
+            
+            for i in range(0, len(payloads), BATCH_SIZE):
+                batch_end = i + BATCH_SIZE
+                batch_payloads = payloads[i:batch_end]
+                
+                collection.add(
+                    ids=[p['id'] for p in batch_payloads],
+                    embeddings=embeddings[i:batch_end].tolist(),
+                    documents=[p['text'] for p in batch_payloads],
+                    metadatas=[p['metadata'] for p in batch_payloads]
+                )
+                
+                # Update progress bar
+                current_batch = (i // BATCH_SIZE) + 1
+                percent_complete = int((current_batch / total_batches) * 100)
+                my_bar.progress(current_batch / total_batches, text=f"Indexing progress: {percent_complete}% ({current_batch}/{total_batches} batches)")
+                
+            my_bar.empty() # Remove the bar once finished 
+            st.success("Indexing complete!")
+        else:
+            st.error(f"Raw files not found in {base_path}. Please check your folder structure.")
+            
+    return collection
+
+
 
 @st.cache_resource
 def load_model():
