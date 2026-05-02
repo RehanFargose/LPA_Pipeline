@@ -87,13 +87,13 @@ query_text = st.text_input("Enter a legal concept or fact pattern (e.g., 'Enviro
 
 if query_text:
     with st.spinner("Searching vector space..."):
-        # 1. Embed the query text
+        # Embed query text
         query_vector = model.encode(query_text).tolist()
 
-        # 2. Query ChromaDB for top 3 results
+        # Query ChromaDB for relevant results
         results = collection.query(
             query_embeddings=[query_vector],
-            n_results=3,
+            n_results=5,
             include=["documents", "metadatas", "distances"]
         )
 
@@ -107,7 +107,17 @@ if query_text:
             with col1:
                 st.write("**Metadata**")
                 st.write(f"📅 **Year:** {results['metadatas'][0][i].get('year', 'N/A')}")
+                st.write(f"📅 **Acts:** {results['metadatas'][0][i].get('acts', 'N/A')}")
+                st.write(f"📅 **Coram:** {results['metadatas'][0][i].get('coram', 'N/A')}")
+                st.write(f"📅 **Decision_Date:** {results['metadatas'][0][i].get('decision_date', 'N/A')}")
+                st.write(f"📅 **Case No:** {results['metadatas'][0][i].get('case_no', 'N/A')}")
+                st.write(f"📅 **Disposal Nature:** {results['metadatas'][0][i].get('disposal_nature', 'N/A')}")
+                st.write(f"📅 **Neutral Citation:** {results['metadatas'][0][i].get('neutral_citation', 'N/A')}")
+                st.write(f"🆔 **Chunk/File ID:** {results['ids'][0][i]}")
+
+                # Cosine similarity/distance, lower is better
                 st.write(f"📏 **Distance:** {round(results['distances'][0][i], 4)}")
+                
             
             with col2:
                 st.write("**Excerpt (Retrieved Chunk)**")
@@ -121,4 +131,4 @@ if st.button("Analyze with Gemini"):
     
     
 # To run the app:    streamlit run my_app.py
-# T0 check GPU usage: nvitop 
+# To check GPU usage: nvitop 
