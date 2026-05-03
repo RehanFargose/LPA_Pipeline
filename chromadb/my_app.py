@@ -4,6 +4,9 @@ from sentence_transformers import SentenceTransformer
 import os
 import numpy as np
 import json
+from RAG_Stages.legal_utils import process_document
+
+
 
 
 # --- Page Configuration ---
@@ -75,6 +78,107 @@ def load_model():
 collection = load_chroma()
 model = load_model()
 
+
+
+
+
+# --- NEW UI SECTION ---
+st.header("⚖️ Dispute Resolution & Mediation Portal")
+st.markdown("---")
+
+uploaded_files = st.file_uploader(
+    "Upload all relevant documents (Arguments, Evidence, Fact Sheets)", 
+    type=["pdf", "docx"], 
+    accept_multiple_files=True
+)
+
+
+if st.button("Find Precedents"):
+    if uploaded_files:
+        all_cleaned_text = []
+        with st.spinner("Processing documents..."):
+            for uploaded_file in uploaded_files:
+                cleaned_text = process_document(uploaded_file)
+                if cleaned_text:
+                    all_cleaned_text.append(cleaned_text)
+            full_case_context = "\n\n".join(all_cleaned_text)
+            
+        with st.spinner("Analyzing case segments and searching precedents..."):
+            # --- Sliding Window Implementation ---
+            WINDOW_SIZE = 1000  # Characters per chunk
+            OVERLAP = 200       # Overlap to maintain context between windows
+            
+            chunks = [full_case_context[i:i + WINDOW_SIZE] 
+                      for i in range(0, len(full_case_context), WINDOW_SIZE - OVERLAP)]
+            
+            # To avoid hitting performance bottlenecks, we limit the number of windows
+            max_chunks = chunks[:10] 
+            
+            all_results_map = {} # Store unique results and their best (minimum) distance
+
+            for chunk in max_chunks:
+                query_vector = model.encode(chunk).tolist()
+                chunk_results = collection.query(
+                    query_embeddings=[query_vector],
+                    n_results=3,
+                    include=["documents", "metadatas", "distances"]
+                )
+                
+                # Aggregate results
+                for i in range(len(chunk_results['ids'][0])):
+                    res_id = chunk_results['ids'][0][i]
+                    dist = chunk_results['distances'][0][i]
+                    
+                    if res_id not in all_results_map or dist < all_results_map[res_id]['distance']:
+                        all_results_map[res_id] = {
+                            "id": res_id,
+                            "document": chunk_results['documents'][0][i],
+                            "metadata": chunk_results['metadatas'][0][i],
+                            "distance": dist,
+                            "frequency": all_results_map.get(res_id, {}).get("frequency", 0) + 1
+                        }
+            
+            # Sort by distance (ascending) then frequency (descending)
+            sorted_results = sorted(
+                all_results_map.values(), 
+                key=lambda x: (x['distance'], -x['frequency'])
+            )
+
+        # --- Displaying the Aggregated Results ---
+        st.subheader(f"Top Matching Precedents (Analyzed {len(max_chunks)} segments)")
+        
+        for i, res in enumerate(sorted_results[:30]): # Show top 5 unique precedents
+            with st.expander(f"Result {i+1}: {res['metadata'].get('case_name', 'Unknown Case')}"):
+                col1, col2 = st.columns([1, 3])
+                
+                with col1:
+                    st.write("**Metadata**")
+                    # Fixed metadata
+                    st.write(f"📅 **Year:** {res['metadata'].get('year', 'N/A')}")
+                    st.write(f"🆔 **Chunk/File ID:** `{res['id']}`")                    
+                    st.write(f"📅 **Case No:** {res['metadata'].get('case_no', 'N/A')}")
+                    st.write(f"📅 **Acts:** {res['metadata'].get('acts', 'N/A')}")
+                    st.write(f"📅 **Coram:** {res['metadata'].get('coram', 'N/A')}")
+                    st.write(f"📅 **Decision_Date:** {res['metadata'].get('decision_date', 'N/A')}")
+                    st.write(f"📅 **Disposal Nature:** {res['metadata'].get('disposal_nature', 'N/A')}")
+                    st.write(f"📅 **Neutral Citation:** {res['metadata'].get('neutral_citation', 'N/A')}")
+                    
+                    # Cosine similarity/distance, lower is better
+                    st.write(f"📏 **Distance:** {round(res['distance'], 4)}")
+                    
+                    # Similar Segments retrieved
+                    st.write(f"🔄 **Segment Hits:** {res['frequency']}")
+                
+                with col2:
+                    st.write("**Excerpt**")
+                    st.write(res['document'])
+    else:
+        st.error("Please upload at least one document.")
+
+
+
+
+
 # --- Sidebar: Database Stats ---
 with st.sidebar:
     st.header("Database Overview")
@@ -82,53 +186,9 @@ with st.sidebar:
     st.metric("Total Chunks Indexed", total_docs)
     st.info("Dataset scope: 1990 - 2025 Indian SC Judgments")
 
-# --- Main UI: Search Interface ---
-query_text = st.text_input("Enter a legal concept or fact pattern (e.g., 'Environmental negligence in Maharashtra'):")
 
-if query_text:
-    with st.spinner("Searching vector space..."):
-        # Embed query text
-        query_vector = model.encode(query_text).tolist()
 
-        # Query ChromaDB for relevant results
-        results = collection.query(
-            query_embeddings=[query_vector],
-            n_results=5,
-            include=["documents", "metadatas", "distances"]
-        )
 
-    # --- Displaying the "Compass-like" Results ---
-    st.subheader("Top Matching Precedents")
-    
-    for i in range(len(results['documents'][0])):
-        with st.expander(f"Result {i+1}: {results['metadatas'][0][i].get('case_name', 'Unknown Case')}"):
-            col1, col2 = st.columns([1, 3])
-            
-            with col1:
-                st.write("**Metadata**")
-                st.write(f"📅 **Year:** {results['metadatas'][0][i].get('year', 'N/A')}")
-                st.write(f"📅 **Acts:** {results['metadatas'][0][i].get('acts', 'N/A')}")
-                st.write(f"📅 **Coram:** {results['metadatas'][0][i].get('coram', 'N/A')}")
-                st.write(f"📅 **Decision_Date:** {results['metadatas'][0][i].get('decision_date', 'N/A')}")
-                st.write(f"📅 **Case No:** {results['metadatas'][0][i].get('case_no', 'N/A')}")
-                st.write(f"📅 **Disposal Nature:** {results['metadatas'][0][i].get('disposal_nature', 'N/A')}")
-                st.write(f"📅 **Neutral Citation:** {results['metadatas'][0][i].get('neutral_citation', 'N/A')}")
-                st.write(f"🆔 **Chunk/File ID:** {results['ids'][0][i]}")
-
-                # Cosine similarity/distance, lower is better
-                st.write(f"📏 **Distance:** {round(results['distances'][0][i], 4)}")
-                
-            
-            with col2:
-                st.write("**Excerpt (Retrieved Chunk)**")
-                st.write(results['documents'][0][i])
-
-# --- Placeholder for Gemini Integration ---
-st.divider()
-if st.button("Analyze with Gemini"):
-    st.warning("Next step: Connect your Google API key to synthesize these results!")
-    
-    
     
 # To run the app:    streamlit run my_app.py
 # To check GPU usage: nvitop 
