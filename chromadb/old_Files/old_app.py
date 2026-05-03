@@ -114,6 +114,7 @@ if query_text:
                 st.write(f"📅 **Disposal Nature:** {results['metadatas'][0][i].get('disposal_nature', 'N/A')}")
                 st.write(f"📅 **Neutral Citation:** {results['metadatas'][0][i].get('neutral_citation', 'N/A')}")
                 st.write(f"🆔 **Chunk/File ID:** {results['ids'][0][i]}")
+                st.write(f"📅 **Precedents:** {results['metadatas'][0][i].get('precedents', 'N/A')}")
 
                 # Cosine similarity/distance, lower is better
                 st.write(f"📏 **Distance:** {round(results['distances'][0][i], 4)}")

@@ -60,8 +60,10 @@ Stages/DAPT/pre_tokenized_dataset
 Stages/0.75_Fine-Tuning/Deepseek_R1_8B_DAPT_LoRA
 Stages/0.75_Fine-Tuning/Deepseek_R1_8B_DAPT_LoRA.zip
 
+# Secret files
+*.env
+*.streamlit
 
-.env
 
 # -----------------------------
 # IDE files

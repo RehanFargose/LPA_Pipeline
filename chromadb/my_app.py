@@ -5,7 +5,7 @@ import os
 import numpy as np
 import json
 from RAG_Stages.legal_utils import process_document
-
+import RAG_Stages.gemini_utils as gu
 
 
 
@@ -93,61 +93,67 @@ uploaded_files = st.file_uploader(
 )
 
 
+# Call the precedent retrieval function with the uploaded files
 if st.button("Find Precedents"):
     if uploaded_files:
-        all_cleaned_text = []
-        with st.spinner("Processing documents..."):
-            for uploaded_file in uploaded_files:
-                cleaned_text = process_document(uploaded_file)
-                if cleaned_text:
-                    all_cleaned_text.append(cleaned_text)
-            full_case_context = "\n\n".join(all_cleaned_text)
-            
-        with st.spinner("Analyzing case segments and searching precedents..."):
-            # --- Sliding Window Implementation ---
-            WINDOW_SIZE = 1000  # Characters per chunk
-            OVERLAP = 200       # Overlap to maintain context between windows
-            
-            chunks = [full_case_context[i:i + WINDOW_SIZE] 
-                      for i in range(0, len(full_case_context), WINDOW_SIZE - OVERLAP)]
-            
-            # To avoid hitting performance bottlenecks, we limit the number of windows
-            max_chunks = chunks[:10] 
-            
-            all_results_map = {} # Store unique results and their best (minimum) distance
-
-            for chunk in max_chunks:
-                query_vector = model.encode(chunk).tolist()
-                chunk_results = collection.query(
-                    query_embeddings=[query_vector],
-                    n_results=3,
-                    include=["documents", "metadatas", "distances"]
-                )
-                
-                # Aggregate results
-                for i in range(len(chunk_results['ids'][0])):
-                    res_id = chunk_results['ids'][0][i]
-                    dist = chunk_results['distances'][0][i]
-                    
-                    if res_id not in all_results_map or dist < all_results_map[res_id]['distance']:
-                        all_results_map[res_id] = {
-                            "id": res_id,
-                            "document": chunk_results['documents'][0][i],
-                            "metadata": chunk_results['metadatas'][0][i],
-                            "distance": dist,
-                            "frequency": all_results_map.get(res_id, {}).get("frequency", 0) + 1
-                        }
-            
-            # Sort by distance (ascending) then frequency (descending)
-            sorted_results = sorted(
-                all_results_map.values(), 
-                key=lambda x: (x['distance'], -x['frequency'])
-            )
-
-        # --- Displaying the Aggregated Results ---
-        st.subheader(f"Top Matching Precedents (Analyzed {len(max_chunks)} segments)")
+        all_results_map = {}
+        all_cleaned_texts = []
         
-        for i, res in enumerate(sorted_results[:30]): # Show top 5 unique precedents
+        # --- Process Each File Individually ---
+        for uploaded_file in uploaded_files:
+            with st.spinner(f"Analyzing {uploaded_file.name}..."):
+                cleaned_text = process_document(uploaded_file)
+                if not cleaned_text:
+                    continue
+                
+                all_cleaned_texts.append(cleaned_text)
+                
+                
+                # Create sliding windows for THIS specific file
+                WINDOW_SIZE = 1000
+                OVERLAP = 200
+                file_chunks = [cleaned_text[i:i + WINDOW_SIZE] 
+                            for i in range(0, len(cleaned_text), WINDOW_SIZE - OVERLAP)]
+                
+                # Take the most important parts of THIS document (e.g., first 5 chunks)
+                # This ensures the 2nd and 3rd docs ALWAYS get a search slot
+                sampled_chunks = file_chunks[:5] 
+                
+                for chunk in sampled_chunks:
+                    query_vector = model.encode(chunk).tolist()
+                    chunk_results = collection.query(
+                        query_embeddings=[query_vector],
+                        n_results=10,
+                        include=["documents", "metadatas", "distances"]
+                    )
+                    
+                    # Aggregate results into the global map
+                    for i in range(len(chunk_results['ids'][0])):
+                        res_id = chunk_results['ids'][0][i]
+                        dist = chunk_results['distances'][0][i]
+                        
+                        if res_id not in all_results_map or dist < all_results_map[res_id]['distance']:
+                            all_results_map[res_id] = {
+                                "id": res_id,
+                                "document": chunk_results['documents'][0][i],
+                                "metadata": chunk_results['metadatas'][0][i],
+                                "distance": dist,
+                                "frequency": all_results_map.get(res_id, {}).get("frequency", 0) + 1
+                            }
+
+
+        sorted_results = sorted(all_results_map.values(), key=lambda x: (x['distance'], -x['frequency']))
+        
+        
+        # Save results in session stage for gemini calls
+        st.session_state['last_results'] = sorted_results
+        st.session_state['full_user_text'] = "\n\n".join(all_cleaned_texts)
+        
+        # --- Displaying the Aggregated Results ---
+        st.subheader(f"Top Matching Precedents ({len(sorted_results)} unique results found)")
+        
+        precedent_count = 10
+        for i, res in enumerate(sorted_results[:precedent_count]): 
             with st.expander(f"Result {i+1}: {res['metadata'].get('case_name', 'Unknown Case')}"):
                 col1, col2 = st.columns([1, 3])
                 
@@ -162,7 +168,8 @@ if st.button("Find Precedents"):
                     st.write(f"📅 **Decision_Date:** {res['metadata'].get('decision_date', 'N/A')}")
                     st.write(f"📅 **Disposal Nature:** {res['metadata'].get('disposal_nature', 'N/A')}")
                     st.write(f"📅 **Neutral Citation:** {res['metadata'].get('neutral_citation', 'N/A')}")
-                    
+                    st.write(f"📅 **Precedents:** {res['metadata'].get('precedents', 'N/A')}")
+
                     # Cosine similarity/distance, lower is better
                     st.write(f"📏 **Distance:** {round(res['distance'], 4)}")
                     
@@ -174,6 +181,48 @@ if st.button("Find Precedents"):
                     st.write(res['document'])
     else:
         st.error("Please upload at least one document.")
+
+
+
+
+
+
+
+# Call the multi-stage gemini prompts
+if 'last_results' in st.session_state:
+    st.markdown("---")
+    st.subheader("🤖 Multi-Stage Legal Analysis")
+    
+    if st.button("Run Full Chain Analysis"):
+        full_analysis_context = ""
+        
+        # Stage 1: Synthesis
+        st.write("#### 1. Document Synthesis")
+        response1 = gu.prompt_1_document_synthesis(st.session_state['full_user_text'])
+        res1_text = st.write_stream(response1)
+        
+        # Stage 2: Evidence Scrutiny
+        st.write("#### 2. Evidence Scrutiny")
+        response2 = gu.prompt_2_evidence_scrutiny(res1_text)
+        res2_text = st.write_stream(response2)
+        
+        # Stage 3: Precedent Alignment
+        st.write("#### 3. Precedent Alignment")
+        response3 = gu.prompt_3_precedent_analysis(res2_text, st.session_state['last_results'])
+        res3_text = st.write_stream(response3)
+        
+        # Stage 4: Verdict Prediction
+        st.write("#### 4. Verdict Prediction")
+        response4 = gu.prompt_4_verdict_prediction(res3_text)
+        res4_text = st.write_stream(response4)
+        
+        # Stage 5: Executive Summary
+        st.write("#### 5. Executive Summary (Non-Lawyer Friendly)")
+        response5 = gu.prompt_5_executive_summary(res4_text)
+        st.write_stream(response5)
+
+
+
 
 
 
