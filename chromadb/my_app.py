@@ -6,15 +6,15 @@ import numpy as np
 import json
 from RAG_Stages.legal_utils import process_document
 import RAG_Stages.gemini_utils as gu
+from RAG_Stages.search_utils import perform_precedent_search
 
 
-
-# --- Page Configuration ---
+# Page Configuration 
 st.set_page_config(page_title="Legal NLP Explorer", layout="wide")
 st.title("⚖️ Indian Supreme Court Precedent Explorer")
 st.markdown("### MTech Thesis Research: 1990–2025 Judgment Analysis")
 
-# --- Initialize Resources ---
+# Initialize Resources
 @st.cache_resource
 def load_chroma():
     #  Setup persistent client
@@ -25,7 +25,7 @@ def load_chroma():
     if collection.count() == 0:
         st.info("First-time setup: Indexing raw vectors into ChromaDB...")
         
-        # Define paths to your extracted files[cite: 3]
+        # Define paths to your extracted files
         base_path = "C:/LPA_Vector_DB/my_legal_db"
         vectors_path = os.path.join(base_path, "sc_vectors.npy")
         payload_path = os.path.join(base_path, "sc_payload.json")
@@ -36,7 +36,7 @@ def load_chroma():
             with open(payload_path, "r") as f:
                 payloads = json.load(f)
 
-            # 3. Batch insert into ChromaDB[cite: 1]
+            # Batch insert into ChromaDB
             BATCH_SIZE = 5000
             total_batches = (len(payloads) + BATCH_SIZE - 1) // BATCH_SIZE
             
@@ -61,7 +61,7 @@ def load_chroma():
                 percent_complete = int((current_batch / total_batches) * 100)
                 my_bar.progress(current_batch / total_batches, text=f"Indexing progress: {percent_complete}% ({current_batch}/{total_batches} batches)")
                 
-            my_bar.empty() # Remove the bar once finished 
+            my_bar.empty() 
             st.success("Indexing complete!")
         else:
             st.error(f"Raw files not found in {base_path}. Please check your folder structure.")
@@ -72,7 +72,6 @@ def load_chroma():
 
 @st.cache_resource
 def load_model():
-    # Using a lightweight model suitable for GTX 1650
     return SentenceTransformer('BAAI/bge-small-en-v1.5')
 
 collection = load_chroma()
@@ -93,70 +92,22 @@ uploaded_files = st.file_uploader(
 )
 
 
-# Call the precedent retrieval function with the uploaded files
+# Call the New Modular  precedent retrieval function with the uploaded files
 if st.button("Find Precedents"):
     if uploaded_files:
-        all_results_map = {}
-        all_cleaned_texts = []
+        # Call the new external function
+        sorted_results, combined_text = perform_precedent_search(uploaded_files, model, collection)
         
-        # --- Process Each File Individually ---
-        for uploaded_file in uploaded_files:
-            with st.spinner(f"Analyzing {uploaded_file.name}..."):
-                cleaned_text = process_document(uploaded_file)
-                if not cleaned_text:
-                    continue
-                
-                all_cleaned_texts.append(cleaned_text)
-                
-                
-                # Create sliding windows for THIS specific file
-                WINDOW_SIZE = 1000
-                OVERLAP = 200
-                file_chunks = [cleaned_text[i:i + WINDOW_SIZE] 
-                            for i in range(0, len(cleaned_text), WINDOW_SIZE - OVERLAP)]
-                
-                # Take the most important parts of THIS document (e.g., first 5 chunks)
-                # This ensures the 2nd and 3rd docs ALWAYS get a search slot
-                sampled_chunks = file_chunks[:5] 
-                
-                for chunk in sampled_chunks:
-                    query_vector = model.encode(chunk).tolist()
-                    chunk_results = collection.query(
-                        query_embeddings=[query_vector],
-                        n_results=10,
-                        include=["documents", "metadatas", "distances"]
-                    )
-                    
-                    # Aggregate results into the global map
-                    for i in range(len(chunk_results['ids'][0])):
-                        res_id = chunk_results['ids'][0][i]
-                        dist = chunk_results['distances'][0][i]
-                        
-                        if res_id not in all_results_map or dist < all_results_map[res_id]['distance']:
-                            all_results_map[res_id] = {
-                                "id": res_id,
-                                "document": chunk_results['documents'][0][i],
-                                "metadata": chunk_results['metadatas'][0][i],
-                                "distance": dist,
-                                "frequency": all_results_map.get(res_id, {}).get("frequency", 0) + 1
-                            }
-
-
-        sorted_results = sorted(all_results_map.values(), key=lambda x: (x['distance'], -x['frequency']))
-        
-        
-        # Save results in session stage for gemini calls
+        # Save to session state
         st.session_state['last_results'] = sorted_results
-        st.session_state['full_user_text'] = "\n\n".join(all_cleaned_texts)
+        st.session_state['full_user_text'] = combined_text
         
-        # --- Displaying the Aggregated Results ---
+        # --- Display Results ---
         st.subheader(f"Top Matching Precedents ({len(sorted_results)} unique results found)")
         
-        precedent_count = 10
-        for i, res in enumerate(sorted_results[:precedent_count]): 
+        for i, res in enumerate(sorted_results[:10]): 
             with st.expander(f"Result {i+1}: {res['metadata'].get('case_name', 'Unknown Case')}"):
                 col1, col2 = st.columns([1, 3])
-                
                 with col1:
                     st.write("**Metadata**")
                     # Fixed metadata
@@ -181,10 +132,6 @@ if st.button("Find Precedents"):
                     st.write(res['document'])
     else:
         st.error("Please upload at least one document.")
-
-
-
-
 
 
 

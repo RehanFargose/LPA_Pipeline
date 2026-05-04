@@ -23,7 +23,7 @@ env/
 *.parquet
 
 # Ignore other large data file types
-*.pdf
+# *.pdf
 *.csv
 *.tsv
 *.jsonl
