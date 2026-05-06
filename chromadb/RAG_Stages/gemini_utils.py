@@ -55,7 +55,7 @@ def prompt_2_evidence_scrutiny(structured_context):
     client = get_gemini_client()
     response = client.models.generate_content_stream(
         model=curr_model,
-        contents=f"Based on these structured facts, analyze the provided evidence for consistency and legal relevance:\n\n{structured_context}",
+        contents=f"Based on these structured facts and arguments, scrutinize the provided evidence for consistency and legal relevance:\n\n{structured_context}",
     )
     return stream_wrapper(response)
     

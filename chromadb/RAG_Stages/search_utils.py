@@ -11,7 +11,7 @@ def perform_precedent_search(uploaded_files, model, collection):
     
     for uploaded_file in uploaded_files:
         with st.spinner(f"Analyzing {uploaded_file.name}..."):
-            cleaned_text = process_document(uploaded_file)
+            cleaned_text, file_name = process_document(uploaded_file)
             if not cleaned_text:
                 continue
             
@@ -51,4 +51,4 @@ def perform_precedent_search(uploaded_files, model, collection):
     sorted_results = sorted(all_results_map.values(), key=lambda x: (x['distance'], -x['frequency']))
     combined_text = "\n\n".join(all_cleaned_texts)
     
-    return sorted_results, combined_text
+    return sorted_results, combined_text, file_name

@@ -2,6 +2,11 @@ import fitz  # PyMuPDF
 import re
 import io
 from docx import Document
+from deep_translator import GoogleTranslator
+from langdetect import detect, DetectorFactory
+
+# Ensures consistent results
+DetectorFactory.seed = 0
 
 def legal_cleaning(text):
     """
@@ -35,11 +40,13 @@ def legal_cleaning(text):
 
     return text.strip()
 
-def process_document(uploaded_file):
+def process_document(uploaded_file, translate_to_en=True):
     """
     Detects file type, extracts text, and applies legal cleaning.
     """
     file_extension = uploaded_file.name.split('.')[-1].lower()
+    input_file_name = uploaded_file.name.split('.')[0]
+    print(f"Processing file: {input_file_name}.{file_extension}")
     raw_text = ""
 
     if file_extension == "pdf":
@@ -54,4 +61,27 @@ def process_document(uploaded_file):
     else:
         return None
 
-    return legal_cleaning(raw_text)
+    # Clean text 1st
+    cleaned_text = legal_cleaning(raw_text)
+    
+    # Translate if it's not in English
+    if translate_to_en:
+        try:
+            detected_lang = detect(cleaned_text[:1000])
+            
+            # If not in english, translate to English
+            if detected_lang != 'en':
+                print(f"Detected {detected_lang}, initiating translation...")
+                # GoogleTranslator handles 'auto' detection for Hindi, Marathi, Gujarati, etc.
+                #  ~5000 character limit per request, so chunk if necessary
+                translator = GoogleTranslator(source='auto', target='en')
+                
+                # Chunking logic for long legal documents
+                chunks = [cleaned_text[i:i+4500] for i in range(0, len(cleaned_text), 4500)]
+                translated_chunks = [translator.translate(ch) for ch in chunks]
+                cleaned_text = " ".join(translated_chunks)
+        except Exception as e:
+            print(f"Translation failed: {e}")
+            
+    
+    return cleaned_text, input_file_name

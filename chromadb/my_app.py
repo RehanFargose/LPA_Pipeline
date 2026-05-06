@@ -96,11 +96,12 @@ uploaded_files = st.file_uploader(
 if st.button("Find Precedents"):
     if uploaded_files:
         # Call the new external function
-        sorted_results, combined_text = perform_precedent_search(uploaded_files, model, collection)
+        sorted_results, combined_text, input_file_name = perform_precedent_search(uploaded_files, model, collection)
         
         # Save to session state
         st.session_state['last_results'] = sorted_results
         st.session_state['full_user_text'] = combined_text
+        st.session_state['input_file_name'] = input_file_name
         
         # --- Display Results ---
         st.subheader(f"Top Matching Precedents ({len(sorted_results)} unique results found)")
@@ -135,6 +136,8 @@ if st.button("Find Precedents"):
 
 
 
+full_report = f"# Analysis Report\n\n"
+
 # Call the multi-stage gemini prompts
 if 'last_results' in st.session_state:
     st.markdown("---")
@@ -147,30 +150,43 @@ if 'last_results' in st.session_state:
         st.write("#### 1. Document Synthesis")
         response1 = gu.prompt_1_document_synthesis(st.session_state['full_user_text'])
         res1_text = st.write_stream(response1)
+        full_report += res1_text + "\n\n"
         
         # Stage 2: Evidence Scrutiny
         st.write("#### 2. Evidence Scrutiny")
         response2 = gu.prompt_2_evidence_scrutiny(res1_text)
         res2_text = st.write_stream(response2)
+        full_report += res2_text + "\n\n"
         
         # Stage 3: Precedent Alignment
         st.write("#### 3. Precedent Alignment")
         response3 = gu.prompt_3_precedent_analysis(res2_text, st.session_state['last_results'])
         res3_text = st.write_stream(response3)
+        full_report += res3_text + "\n\n"
         
         # Stage 4: Verdict Prediction
         st.write("#### 4. Verdict Prediction")
         response4 = gu.prompt_4_verdict_prediction(res3_text)
         res4_text = st.write_stream(response4)
+        full_report += res4_text + "\n\n"
         
         # Stage 5: Executive Summary
         st.write("#### 5. Executive Summary (Non-Lawyer Friendly)")
         response5 = gu.prompt_5_executive_summary(res4_text)
-        st.write_stream(response5)
+        res5_text = st.write_stream(response5)
+        full_report += res5_text + "\n\n"
 
 
 
+input_file_name = st.session_state.get('input_file_name', 'Legal_Analysis_Report')
 
+# Built-in Streamlit button for text/markdown
+st.download_button(
+    label="Download Report as Markdown",
+    data=full_report,
+    file_name=f"{input_file_name}.md",
+    mime="text/markdown"
+)
 
 
 
