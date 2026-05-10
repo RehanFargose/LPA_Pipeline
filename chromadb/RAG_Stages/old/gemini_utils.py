@@ -35,7 +35,7 @@ def get_gemini_client():
 
 def prompt_1_document_synthesis(raw_text):
     """Stage 1: Synthesize raw case documents into structured formats."""
-    curr_model = "gemini-3.1-flash-lite"
+    curr_model = "gemini-2.5-flash"
     
     client = get_gemini_client()
     
@@ -50,7 +50,7 @@ def prompt_1_document_synthesis(raw_text):
 
 def prompt_2_evidence_scrutiny(structured_context):
     """Stage 2: Scrutiny of evidence against facts."""
-    curr_model = "gemini-3.1-flash-lite"
+    curr_model = "gemini-2.5-flash"
     
     client = get_gemini_client()
     response = client.models.generate_content_stream(
@@ -64,7 +64,7 @@ def prompt_2_evidence_scrutiny(structured_context):
 
 def prompt_3_precedent_analysis(evidence_analysis, precedents):
     """Stage 3: Identify relevant Indian case law and align with precedents."""
-    curr_model = "gemini-3.1-flash-lite"
+    curr_model = "gemini-2.5-flash"
     precedent_text = "\n".join([p['document'] for p in precedents[:5]])
 
     client = get_gemini_client()
@@ -77,7 +77,7 @@ def prompt_3_precedent_analysis(evidence_analysis, precedents):
 
 def prompt_4_verdict_prediction(aligned_precedents):
     """Stage 4: Generate reasoned outcomes based on statutory alignment."""
-    curr_model = "gemini-3.1-flash-lite"
+    curr_model = "gemini-2.5-flash"
     
     client = get_gemini_client()
     response = client.models.generate_content_stream(
@@ -90,7 +90,7 @@ def prompt_4_verdict_prediction(aligned_precedents):
 
 def prompt_5_executive_summary(final_prediction):
     """Stage 5: Create executive case reports for non-lawyers."""
-    curr_model = "gemini-3.1-flash-lite"
+    curr_model = "gemini-2.5-flash"
     client = get_gemini_client()
     response = client.models.generate_content_stream(
         model=curr_model,
