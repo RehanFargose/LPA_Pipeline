@@ -1,99 +1,81 @@
-from google import genai
 import streamlit as st
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
-def stream_wrapper(response):
-    """Helper to yield text chunks from the new SDK's stream response."""
-    for chunk in response:
-        yield chunk.text
-
-
-# 1. Create a global variable to hold the client
-_global_client = None
-
-
-def get_gemini_client():
+def get_gemini_chain(prompt_template):
     """
-    Initializes and returns the modern Gemini API client.
-    The API key is retrieved from .streamlit/secrets.toml.
+    Creates a standard LangChain 'Chain': 
+    Prompt -> Model -> String Output
     """
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.1-flash-lite", 
+        api_key=st.secrets["GEMINI_LPA_KEY"],
+        streaming=True
+    )
     
-    """Initializes the client ONCE and keeps it alive."""
-    global _global_client
-    if _global_client is None:
-        # Initialize only if it doesn't exist yet
-        _global_client = genai.Client(api_key=st.secrets["GEMINI_LPA_KEY"])
-        
-        
-    generate_models = [m.name for m in _global_client.models.list() 
-                   if 'generateContent' in m.supported_actions]
-    print("Models you can actually use for generation:")
-    print(generate_models)
-        
-    return _global_client
-
+    prompt = ChatPromptTemplate.from_template(prompt_template)
+    
+    # This is the "LCEL" (LangChain Expression Language) syntax
+    return prompt | model | StrOutputParser()
 
 
 def prompt_1_document_synthesis(raw_text):
-    """Stage 1: Synthesize raw case documents into structured formats."""
-    curr_model = "gemini-3.1-flash-lite"
-    
-    client = get_gemini_client()
-    
-    # Use the client.models.generate_content method
-    response = client.models.generate_content_stream(
-        model=curr_model,
-        contents=f"Extract and structure the core facts, parties involved, primary dispute and applicable ipc/bns statutes and relevant articles of the Indian constituion from this raw legal text:\n\n{raw_text[:8000]}",
-    )
-    return stream_wrapper(response)
-    
+    template = f"Extract and structure core facts, parties, and statutes from this raw legal text: {{text}}"
+    chain = get_gemini_chain(template)
+    return chain.stream({"text": raw_text[:8000]})
 
 
-def prompt_2_evidence_scrutiny(structured_context):
-    """Stage 2: Scrutiny of evidence against facts."""
-    curr_model = "gemini-3.1-flash-lite"
-    
-    client = get_gemini_client()
-    response = client.models.generate_content_stream(
-        model=curr_model,
-        contents=f"Based on these structured facts and arguments, scrutinize the provided evidence for consistency and legal relevance:\n\n{structured_context}",
-    )
-    return stream_wrapper(response)
-    
-    
+def prompt_2_evidence_scrutiny(evidence_context):
+    # template = f"Scrutinize the provided evidence for consistency and legal relevance based on these facts: {{evidence}}"
+    template = f"""
+        Analyze the provided evidence for consistency. 
+        Focus specifically on:
+        1. Allegations of matrimonial misconduct (e.g., unchastity, desertion).
+        2. Whether these allegations were substantiated or withdrawn.
+        3. Logical inconsistencies between the pleadings and the subsequent witness testimony.
+        Facts: {{evidence}}
+        """
+    chain = get_gemini_chain(template)
+    return chain.stream({"evidence": evidence_context})
 
 
 def prompt_3_precedent_analysis(evidence_analysis, precedents):
-    """Stage 3: Identify relevant Indian case law and align with precedents."""
-    curr_model = "gemini-3.1-flash-lite"
     precedent_text = "\n".join([p['document'] for p in precedents[:5]])
+    template = f"Compare this analysis with these Supreme Court precedents:\n\nPrecedents: {precedent_text}\n\nAnalysis: {{analysed_evidence}}"
+    chain = get_gemini_chain(template)
+    return chain.stream({"analysed_evidence": evidence_analysis})
 
-    client = get_gemini_client()
-    response = client.models.generate_content_stream(
-        model=curr_model,
-        contents=f"Compare this evidence analysis with these Supreme Court precedents (1990-2025). Identify direct overlaps:\n\nAnalysis: {evidence_analysis}\n\nPrecedents: {precedent_text}",
-    )
-    return stream_wrapper(response)
-    
 
+# ... follow the same pattern for stages 4 and 5
 def prompt_4_verdict_prediction(aligned_precedents):
     """Stage 4: Generate reasoned outcomes based on statutory alignment."""
-    curr_model = "gemini-3.1-flash-lite"
     
-    client = get_gemini_client()
-    response = client.models.generate_content_stream(
-        model=curr_model,
-        contents=f"Predict a probable legal outcome or 'verdict' based on statutory alignment, applicable ipc/bns statutes and the preceding analysis:\n\n{aligned_precedents}",
-    )
-    return stream_wrapper(response)
+    # template = f"Predict a probable legal outcome or 'verdict' based on statutory alignment, applicable ipc/bns statutes and the preceding analysis:\n\n{{aligned_precedents}}"
+    #    3. **Sentencing/Relief**: 
+    #    - If criminal: Predict jail time or fine amounts based on statutory limits.
+    #    - If civil/family: Predict specific relief (e.g., Alimony amount, specific performance, or damages).
+    template = f"""
+    Act as a presiding judge. Based on the statutory alignment and preceding analysis, provide:
+    1. **Disposition**: State clearly if the petition is Allowed, Dismissed, or Partially Allowed.
+    2. **Reasoning**: Briefly link the specific IPC/BNS sections to the facts.
+    3. ***Sentencing/Relief**: If specific amounts (Alimony/Costs/Jail time) are not mentioned in the text, state the statutory principle for determining them rather than inventing a figure.
+    Context: {{aligned_precedents}}
+    """
+    chain = get_gemini_chain(template)
+    return chain.stream({"aligned_precedents": aligned_precedents})
     
-
-
+    
+    
 def prompt_5_executive_summary(final_prediction):
     """Stage 5: Create executive case reports for non-lawyers."""
-    curr_model = "gemini-3.1-flash-lite"
-    client = get_gemini_client()
-    response = client.models.generate_content_stream(
-        model=curr_model,
-        contents=f"Create a short, simplified executive summary of this legal analysis for a non-lawyer/client:\n\n{final_prediction}",
-    )
-    return stream_wrapper(response)
+    template = f"Create a short, simplified executive summary of this legal analysis for a non-lawyer/client:\n\n{{final_prediction}}"
+    chain = get_gemini_chain(template)
+    return chain.stream({"final_prediction": final_prediction})
+    
+
+
+
+
+
+

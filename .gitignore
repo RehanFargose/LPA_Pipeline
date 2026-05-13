@@ -50,15 +50,17 @@ saved_models/
 outputs/
 intermediate/
 
-
+# Ignore datasets and models/adapters
 Stages/2_Evidence_Scrutinization/Nyaya_Llama_Adapter_MTech
 Stages/2_Evidence_Scrutinization/Nyaya_Llama_Adapter_MTech.zip
 Stages/DAPT/pre_tokenized_dataset.zip
 Stages/DAPT/pre_tokenized_dataset
-
-
 Stages/0.75_Fine-Tuning/Deepseek_R1_8B_DAPT_LoRA
 Stages/0.75_Fine-Tuning/Deepseek_R1_8B_DAPT_LoRA.zip
+
+# Ignore latest ongoing OCR samples for privacy reasons
+chromadb/OCR_Samples
+
 
 # Secret files
 *.env

@@ -152,15 +152,11 @@ if 'last_results' in st.session_state:
         res1_text = st.write_stream(response1)
         full_report += res1_text + "\n\n"
         
-        
-        
         # Stage 2: Evidence Scrutiny
         st.write("#### 2. Evidence Scrutiny")
         response2 = gu.prompt_2_evidence_scrutiny(res1_text)
         res2_text = st.write_stream(response2)
         full_report += res2_text + "\n\n"
-        
-        
         
         # Stage 3: Precedent Alignment
         st.write("#### 3. Precedent Alignment")
@@ -168,15 +164,11 @@ if 'last_results' in st.session_state:
         res3_text = st.write_stream(response3)
         full_report += res3_text + "\n\n"
         
-        
-        
         # Stage 4: Verdict Prediction
         st.write("#### 4. Verdict Prediction")
         response4 = gu.prompt_4_verdict_prediction(res3_text)
         res4_text = st.write_stream(response4)
         full_report += res4_text + "\n\n"
-        
-        
         
         # Stage 5: Executive Summary
         st.write("#### 5. Executive Summary (Non-Lawyer Friendly)")
