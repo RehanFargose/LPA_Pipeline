@@ -87,7 +87,7 @@ st.markdown("---")
 
 uploaded_files = st.file_uploader(
     "Upload all relevant documents (Arguments, Evidence, Fact Sheets)", 
-    type=["pdf", "docx"], 
+    type=["pdf", "docx", "txt"], 
     accept_multiple_files=True
 )
 

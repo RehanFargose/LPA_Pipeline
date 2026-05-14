@@ -60,6 +60,7 @@ Stages/0.75_Fine-Tuning/Deepseek_R1_8B_DAPT_LoRA.zip
 
 # Ignore latest ongoing OCR samples for privacy reasons
 chromadb/OCR_Samples
+chromadb/translations
 
 
 # Secret files
