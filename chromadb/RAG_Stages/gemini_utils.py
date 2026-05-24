@@ -41,8 +41,39 @@ def prompt_2_evidence_scrutiny(evidence_context):
 
 
 def prompt_3_precedent_analysis(evidence_analysis, precedents):
-    precedent_text = "\n".join([p['document'] for p in precedents[:5]])
-    template = f"Compare this analysis with these Supreme Court precedents:\n\nPrecedents: {precedent_text}\n\nAnalysis: {{analysed_evidence}}"
+    """Stage 3: Compare analysis with precedents, now including crucial metadata context."""
+    
+    formatted_precedents = []
+    
+    # Loop through the top 5 precedents and format text + metadata
+    for i, p in enumerate(precedents[:5]):
+        meta = p.get('metadata', {})
+        
+        # Build a structured string for each precedent
+        entry = (
+            f"--- Precedent {i+1} ---\n"
+            f"Case Name: {meta.get('case_name', 'Unknown')} ({meta.get('year', 'N/A')})\n"
+            f"Acts/Statutes: {meta.get('acts', 'N/A')}\n"
+            f"Disposal Nature (Outcome): {meta.get('disposal_nature', 'N/A')}\n"
+            f"Relevant Excerpt:\n{p.get('document', '')}\n"
+        )
+        formatted_precedents.append(entry)
+        
+    # Combine them all into one large string
+    precedent_text = "\n".join(formatted_precedents)
+    
+    # Updated template that instructs the LLM to actually use the metadata
+    template = f"""
+    Compare the provided evidence analysis with the following Supreme Court precedents. 
+    Pay special attention to how the 'Disposal Nature' (the outcome) and 'Acts' of these past cases align with or differ from the current case facts.
+    
+    Precedents: 
+    {precedent_text}
+    
+    Analysis: 
+    {{analysed_evidence}}
+    """
+    
     chain = get_gemini_chain(template)
     return chain.stream({"analysed_evidence": evidence_analysis})
 
