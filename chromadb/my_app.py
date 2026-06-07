@@ -129,8 +129,21 @@ if st.button("Find Precedents"):
                     st.write(f"🔄 **Segment Hits:** {res['frequency']}")
                 
                 with col2:
-                    st.write("**Excerpt**")
+                    # st.write("**Excerpt**")
+                    # st.write(res['document'])
+                    # Create an HTML link that points to the new page, passing the ID in the URL
+                    doc_id = res['id']
+                    nav_link = f"""
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <b>Excerpt</b>
+                            <a href="/Document_Viewer?doc_id={doc_id}" target="_blank" title="Open full text in new tab" style="text-decoration: none; font-size: 20px;">
+                                ↗️
+                            </a>
+                        </div>
+                    """
+                    st.markdown(nav_link, unsafe_allow_html=True)
                     st.write(res['document'])
+                    
     else:
         st.error("Please upload at least one document.")
 
